@@ -2,7 +2,7 @@ import pyxel
 
 class App:
     def __init__(self):
-        pyxel.init(120, 200, title="Touch Move Vertical", fps=60)  # 縦長の画面
+        pyxel.init(240, 400, title="Touch Move Vertical", fps=60)  # 縦長の画面
         self.x = pyxel.width // 2  # キャラのX座標（中央）
         self.y = pyxel.height // 2  # キャラのY座標（中央）
         pyxel.mouse(True)  # マウス（タッチ）を有効化
