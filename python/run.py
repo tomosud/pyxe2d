@@ -2,7 +2,7 @@ import pyxel
 
 class App:
     def __init__(self):
-        px.init(160, 256, title="Pyxel Caver")
+        pyxel.init(160, 256, title="Pyxel Caver")
         self.x = pyxel.width // 2  # キャラクターの初期X位置
         self.y = pyxel.height // 2  # キャラクターの初期Y位置
         pyxel.mouse(True)  # マウス（タッチ）を有効化
