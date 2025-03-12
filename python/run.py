@@ -17,4 +17,7 @@ class App:
         pyxel.cls(0)  # 画面クリア（黒）
         pyxel.rect(self.x - 5, self.y - 5, 10, 10, 11)  # 10x10のキャラ（青）
 
+        pyxel.text(70, 40, "UP", 3)
+        pyxel.text(70, 80, "DOWN", 3)
+        
 App()
