@@ -26,22 +26,61 @@ def find_valid_position(map_data: List[List[int]], tile_size: int) -> Tuple[floa
 
 class Particle:
     """パーティクルエフェクト用のクラス"""
-    def __init__(self, x: float, y: float, angle: float, speed: float, color: int):
+    def __init__(self, x: float, y: float, angle: float, speed: float, color: int, is_spark: bool = False):
         self.x = x
         self.y = y
         self.dx = math.cos(angle) * speed
         self.dy = math.sin(angle) * speed
         self.color = color
         self.life = 30  # 1秒間表示
+        self.is_spark = is_spark
+        self.wall_hits = 0 if is_spark else -1  # -1は壁判定なし、火花は2回まで
+        self.half_size = 1  # パーティクルサイズの半分
 
-    def update(self):
-        self.x += self.dx
-        self.y += self.dy
+    def check_enemy_collision(self, enemies):
+        """エネミーとの衝突判定"""
+        if not self.is_spark:
+            return []
+        
+        killed_enemies = []
+        for enemy in enemies:
+            if abs(self.x - enemy.x) < 4 and abs(self.y - enemy.y) < 4:
+                killed_enemies.append(enemy)
+        return killed_enemies
+
+    def update(self, can_move_to):
+        if self.wall_hits < 0:  # 通常パーティクル
+            self.x += self.dx
+            self.y += self.dy
+            self.life -= 1
+            return self.life > 0
+        
+        # 火花パーティクルの場合
+        new_x = self.x + self.dx
+        new_y = self.y + self.dy
+
+        if can_move_to(new_x, new_y, self.half_size):
+            self.x = new_x
+            self.y = new_y
+        else:
+            # 壁との衝突処理
+            self.wall_hits += 1
+            if self.wall_hits >= 2:
+                return False
+
+            # 反射角度の計算
+            if not can_move_to(new_x, self.y, self.half_size):
+                self.dx = -self.dx  # X方向の反転
+            if not can_move_to(self.x, new_y, self.half_size):
+                self.dy = -self.dy  # Y方向の反転
+
         self.life -= 1
-        return self.life > 0
+        return self.life > 0 and self.wall_hits < 2
 
     def draw(self):
-        pyxel.rect(int(self.x), int(self.y), 2, 2, self.color)
+        pyxel.rect(int(self.x - self.half_size), 
+                  int(self.y - self.half_size),
+                  2, 2, self.color)
 
 class Character:
     """
@@ -148,28 +187,8 @@ class Player(Character):
             # キー入力がない場合は基本速度にリセット
             self.current_speed = self.base_speed
 
-        # 移動判定と壁衝突チェック
-        if can_move_to(self.x + base_dx, self.y + base_dy):
-            self.x += base_dx
-            self.y += base_dy
-        else:
-            # 壁に衝突した場合
-            if self.current_speed >= self.powerd_speed:
-                # ブースト中は壁衝突をカウントしない
-                if self.kill_boost_timer <= 0:
-                    self.wall_hits += 1
-                # はじき返し処理
-                bounce_x = -base_dx * self.WALL_BOUNCE if base_dx != 0 else 0
-                bounce_y = -base_dy * self.WALL_BOUNCE if base_dy != 0 else 0
-                
-                # はじき返し先が移動可能な場合のみ適用
-                if can_move_to(self.x + bounce_x, self.y + bounce_y):
-                    self.x += bounce_x
-                    self.y += bounce_y
-                
-                # 設定回数以上の壁衝突でパワー解除（ブースト中は無効）
-                if self.wall_hits >= self.MAX_WALL_HITS and self.kill_boost_timer <= 0:
-                    self.reset_power_state()
+        # 移動値を返す（実際の移動はAppクラスで行う）
+        return base_dx, base_dy
 
     def draw(self) -> None:
         # パワー状態の円エフェクト描画
@@ -296,6 +315,9 @@ class App:
         self.tile_size = 16
         self.max_enemies = 60  # エネミーの最大数
         self.initial_enemies = 6  # 初期エネミー数
+        
+        # 壁衝突のデバッグ表示用
+        self.wall_flash_timer = 0  # 点滅タイマー
 
         self.map_data = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -325,6 +347,17 @@ class App:
         for angle in angles:
             self.particles.append(Particle(x, y, angle, 2.0, color))
 
+    def create_spark_effect(self, x: float, y: float, speed: float):
+        """壁衝突時の火花エフェクトを生成"""
+        print(f"火花生成開始: 位置({x:.1f}, {y:.1f}), 速度: {speed:.2f}")
+        for i in range(3):
+            angle = random.uniform(0, math.pi * 2)
+            print(f"火花{i + 1}: 角度: {angle:.2f}rad")
+            p = Particle(x, y, angle, speed, 10, True)  # 黄色で火花を生成
+            self.particles.append(p)
+            print(f"火花{i + 1}: dx={p.dx:.2f}, dy={p.dy:.2f}")
+        print(f"火花生成完了: 総パーティクル数 {len(self.particles)}")
+
     def is_wall(self, grid_x: int, grid_y: int) -> bool:
         if 0 <= grid_x < len(self.map_data[0]) and 0 <= grid_y < len(self.map_data):
             return self.map_data[grid_y][grid_x] == 1
@@ -348,22 +381,57 @@ class App:
         old_x = self.player.x
         old_y = self.player.y
         
-        # プレイヤーの更新
-        self.player.update(self.can_move_to)
+        # プレイヤーの移動値を取得
+        dx, dy = self.player.update(self.can_move_to)
         
-        # パーティクルの更新
-        self.particles = [p for p in self.particles if p.update()]
+        # 移動判定と壁衝突チェック
+        if self.can_move_to(self.player.x + dx, self.player.y + dy):
+            self.player.x += dx
+            self.player.y += dy
+        else:
+            print("壁衝突検知")
+            print(f"現在速度: {self.player.current_speed:.2f}, パワー速度: {self.player.powerd_speed:.2f}")
+            
+            if self.player.current_speed >= self.player.powerd_speed:
+                print("火花生成処理開始")
+                self.wall_flash_timer = 5  # 5フレームの点滅
+                
+                # パワー状態での壁衝突時に火花を生成
+                self.create_spark_effect(
+                    self.player.x, self.player.y, 
+                    self.player.current_speed
+                )
+                
+                print("パワー状態での壁衝突！")
+                # ブースト中は壁衝突をカウントしない
+                if self.player.kill_boost_timer <= 0:
+                    self.player.wall_hits += 1
+                
+                # はじき返し処理
+                bounce_x = -dx * self.player.WALL_BOUNCE if dx != 0 else 0
+                bounce_y = -dy * self.player.WALL_BOUNCE if dy != 0 else 0
+                
+                # はじき返し先が移動可能な場合のみ適用
+                if self.can_move_to(self.player.x + bounce_x, self.player.y + bounce_y):
+                    self.player.x += bounce_x
+                    self.player.y += bounce_y
+                
+                # 設定回数以上の壁衝突でパワー解除（ブースト中は無効）
+                if (self.player.wall_hits >= self.player.MAX_WALL_HITS and 
+                    self.player.kill_boost_timer <= 0):
+                    self.player.reset_power_state()
 
+        # エネミーの更新と衝突判定
         collision_occurred = False
         remaining_enemies = []
-        
+
         for enemy in self.enemies:
             enemy.update(self.can_move_to)
             
             # プレイヤーとエネミーの衝突判定
             if self.check_collision(self.player.x, self.player.y, enemy.x, enemy.y):
                 if self.player.current_speed >= self.player.powerd_speed:
-                    # パワード状態ならエネミーを消去し、エフェクトを生成
+                    # パワー状態でエネミーを撃破
                     self.create_death_effect(enemy.x, enemy.y, 12)  # 青色で粒子を生成
                     # ブースト時間をリセット（延長）
                     self.player.kill_boost_timer = self.player.KILL_BOOST_DURATION
@@ -373,7 +441,7 @@ class App:
                     collision_occurred = True
                     enemy.direction = random.randint(0, 3)
                     
-                    # エネミーが増殖可能な状態なら新しいエネミーを生成（2体）
+                    # エネミーが増殖可能な状態なら新しいエネミーを生成
                     total_enemies = len(self.enemies)
                     if total_enemies < self.max_enemies and enemy.multiply_cooldown == 0:
                         # 2体のエネミーを生成
@@ -386,13 +454,29 @@ class App:
                         enemy.multiply_cooldown = enemy.MULTIPLY_COOLDOWN
             
             remaining_enemies.append(enemy)
+
+        # パーティクルとエネミーの衝突判定＆更新
+        updated_particles = []
+        for particle in self.particles:
+            # エネミーとの衝突判定
+            killed_enemies = particle.check_enemy_collision(remaining_enemies)
+            for killed_enemy in killed_enemies:
+                remaining_enemies.remove(killed_enemy)
+                self.create_death_effect(killed_enemy.x, killed_enemy.y, 12)
+
+            # パーティクルの更新
+            if particle.update(self.can_move_to):
+                updated_particles.append(particle)
         
-        # 通常状態での衝突時はプレイヤーの位置を元に戻し、速度をリセット
-        if collision_occurred:
+        # パーティクルの更新を反映
+        self.particles = updated_particles
+        
+        # エネミー衝突時の処理
+        if collision_occurred and not self.player.current_speed >= self.player.powerd_speed:
             self.player.x = old_x
             self.player.y = old_y
             self.player.current_speed = self.player.base_speed
-        
+
         # 生存エネミーのリストを更新
         self.enemies = remaining_enemies
 
@@ -401,8 +485,14 @@ class App:
         for y, row in enumerate(self.map_data):
             for x, tile in enumerate(row):
                 if tile == 1:
+                    # すべての壁を一時的に黄色に
+                    color = 10 if self.wall_flash_timer > 0 else 7
                     pyxel.rect(x * self.tile_size, y * self.tile_size,
-                               self.tile_size, self.tile_size, 7)
+                               self.tile_size, self.tile_size, color)
+        
+        # 点滅タイマーの更新
+        if self.wall_flash_timer > 0:
+            self.wall_flash_timer -= 1
 
         for enemy in self.enemies:
             enemy.draw()
