@@ -6,13 +6,6 @@ from typing import List, Tuple
 def find_valid_position(map_data: List[List[int]], tile_size: int) -> Tuple[float, float]:
     """
     マップ内の通路（値が0）からランダムな位置を返す
-    
-    Args:
-        map_data (List[List[int]]): マップデータ
-        tile_size (int): タイルのサイズ
-    
-    Returns:
-        Tuple[float, float]: 選択された位置のピクセル座標（x, y）
     """
     valid_positions = [
         (x, y) for y, row in enumerate(map_data)
@@ -79,18 +72,12 @@ class Particle:
 
     def draw(self):
         pyxel.rect(int(self.x - self.half_size), 
-                  int(self.y - self.half_size),
-                  2, 2, self.color)
+                   int(self.y - self.half_size),
+                   2, 2, self.color)
 
 class Character:
     """
     キャラクターの基本クラス
-    
-    Attributes:
-        x (float): X座標（ピクセル単位）
-        y (float): Y座標（ピクセル単位）
-        speed (float): 移動速度（ピクセル/フレーム）
-        half_size (int): キャラクターの半径（ピクセル）
     """
     def __init__(self, x: float, y: float, speed: float):
         self.x = x
@@ -338,8 +325,23 @@ class App:
         for _ in range(self.initial_enemies):
             enemy_x, enemy_y = find_valid_position(self.map_data, self.tile_size)
             self.enemies.append(Enemy(enemy_x, enemy_y))
+        
+        # NEXT STAGE表示用タイマー（0のときは通常状態）
+        self.stage_clear_timer = 0
 
         pyxel.run(self.update, self.draw)
+
+    def reset_stage(self):
+        """ステージリセット処理"""
+        player_x, player_y = find_valid_position(self.map_data, self.tile_size)
+        self.player.x, self.player.y = player_x, player_y
+        self.player.reset_power_state()
+        self.particles = []
+        self.enemies = []
+        for _ in range(self.initial_enemies):
+            enemy_x, enemy_y = find_valid_position(self.map_data, self.tile_size)
+            self.enemies.append(Enemy(enemy_x, enemy_y))
+        print("ステージリセット完了")
 
     def create_death_effect(self, x: float, y: float, color: int):
         """エネミー消滅時のエフェクトを生成"""
@@ -377,6 +379,13 @@ class App:
         return abs(x1 - x2) < 4 and abs(y1 - y2) < 4
 
     def update(self):
+        # ステージクリア中は通常の更新を行わず、タイマーが0になったらリセット
+        if self.stage_clear_timer > 0:
+            self.stage_clear_timer -= 1
+            if self.stage_clear_timer == 0:
+                self.reset_stage()
+            return
+
         # プレイヤーの位置を保存（衝突時の位置戻し用）
         old_x = self.player.x
         old_y = self.player.y
@@ -461,8 +470,9 @@ class App:
             # エネミーとの衝突判定
             killed_enemies = particle.check_enemy_collision(remaining_enemies)
             for killed_enemy in killed_enemies:
-                remaining_enemies.remove(killed_enemy)
-                self.create_death_effect(killed_enemy.x, killed_enemy.y, 12)
+                if killed_enemy in remaining_enemies:
+                    remaining_enemies.remove(killed_enemy)
+                    self.create_death_effect(killed_enemy.x, killed_enemy.y, 12)
 
             # パーティクルの更新
             if particle.update(self.can_move_to):
@@ -479,6 +489,10 @@ class App:
 
         # 生存エネミーのリストを更新
         self.enemies = remaining_enemies
+
+        # すべてのエネミーが消滅した場合、次のステージへ遷移
+        if not self.enemies:
+            self.stage_clear_timer = 60  # 60フレーム（約2秒）表示
 
     def draw(self):
         pyxel.cls(0)
@@ -515,5 +529,12 @@ class App:
         pyxel.text(x, 4, enemy_text, 0)  # 黒色テキスト
         
         self.player.draw()
+
+        # ステージクリア時のメッセージ表示
+        if self.stage_clear_timer > 0:
+            text = "NEXT STAGE"
+            x = 240 // 2 - len(text) * 2
+            y = 240 // 2
+            pyxel.text(x, y, text, 7)
 
 App()
