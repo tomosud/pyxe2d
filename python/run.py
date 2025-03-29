@@ -31,24 +31,19 @@ def generate_maze(cols: int, rows: int) -> List[List[int]]:
         現在のセル(cx, cy)から2マス先のセルへ通路を掘っていく再帰関数
         ※セル座標は必ず奇数となる前提
         """
-        # 上下左右（2マス先）の方向リスト
         directions = [(0, -2), (2, 0), (0, 2), (-2, 0)]
-        # 方向をランダムに並び替え
-        random.shuffle(directions)
+        random.shuffle(directions)  # 方向をランダムに並び替え
         for dx, dy in directions:
             nx, ny = cx + dx, cy + dy
-            # 隣のセルが外枠以外かつ未訪問（壁）の場合
             if 0 < nx < cols - 1 and 0 < ny < rows - 1 and maze[ny][nx] == 1:
-                # 現在のセルと隣のセルの間の壁も通路にする
                 maze[cy + dy // 2][cx + dx // 2] = 0
                 maze[ny][nx] = 0
                 carve_passages(nx, ny)
 
-    # 開始位置(1,1)から通路を掘る
     maze[1][1] = 0
     carve_passages(1, 1)
 
-    # 加速用に、中央行をすべて通路にして長い直線通路を確保する
+    # 加速用に、中央行をすべて通路にして長い直線通路を確保
     mid_row = rows // 2
     for x in range(1, cols - 1):
         maze[mid_row][x] = 0
@@ -62,10 +57,8 @@ def generate_map_data(screen_width: int, screen_height: int, tile_size: int) -> 
     ・外周は必ず壁となる
     ・生成後、加速用の長い通路も確保する
     """
-    # タイルの個数（列数・行数）を計算
     cols = screen_width // tile_size
     rows = screen_height // tile_size
-    # 迷路生成には奇数サイズが望ましいので、偶数の場合は1減らす
     if cols % 2 == 0:
         cols -= 1
     if rows % 2 == 0:
@@ -97,13 +90,12 @@ class Particle:
         return killed_enemies
 
     def update(self, can_move_to):
-        if self.wall_hits < 0:  # 通常パーティクルの場合
+        if self.wall_hits < 0:
             self.x += self.dx
             self.y += self.dy
             self.life -= 1
             return self.life > 0
         
-        # 火花パーティクルの場合
         new_x = self.x + self.dx
         new_y = self.y + self.dy
 
@@ -111,16 +103,13 @@ class Particle:
             self.x = new_x
             self.y = new_y
         else:
-            # 壁との衝突処理
             self.wall_hits += 1
             if self.wall_hits >= 8:
                 return False
-
-            # 反射角度の計算
             if not can_move_to(new_x, self.y, self.half_size):
-                self.dx = -self.dx  # X方向の反転
+                self.dx = -self.dx
             if not can_move_to(self.x, new_y, self.half_size):
-                self.dy = -self.dy  # Y方向の反転
+                self.dy = -self.dy
 
         self.life -= 1
         return self.life > 0 and self.wall_hits < 2
@@ -145,31 +134,26 @@ class Player(Character):
     プレイヤーキャラクターを管理するクラス
     """
     def __init__(self, x: float, y: float):
-        # 基本パラメータ
         self.base_speed = 0.1               # 初期速度（ピクセル/フレーム）
         self.max_speed = self.base_speed * 65.0  # 最大速度
         self.acceleration_time = 5.0        # 最大速度に達するまでの時間（秒）
         self.powerd_speed = self.max_speed * 0.3 # 攻撃可能な速度
         self.fps = 30                     # フレームレート（fps）
         
-        # パワード状態の制御用パラメータ
-        self.wall_hits = 0                # 壁への衝突回数
-        self.MAX_WALL_HITS = 2           # パワー解除までの壁衝突回数
-        self.WALL_BOUNCE = 4             # 壁衝突時のはじき返し距離（ピクセル）
-        self.kill_boost_timer = 0        # エネミー撃破後のブースト時間
-        self.KILL_BOOST_DURATION = 30    # ブースト継続時間（1秒）
+        self.wall_hits = 0                # 壁衝突回数
+        self.MAX_WALL_HITS = 2            # パワー解除までの壁衝突回数
+        self.WALL_BOUNCE = 4              # 壁衝突時のはじき返し距離（ピクセル）
+        self.kill_boost_timer = 0         # エネミー撃破後のブースト時間
+        self.KILL_BOOST_DURATION = 30     # ブースト継続時間（1秒）
 
-        # 各フレームごとに加える加速度を計算
         frames_needed = self.acceleration_time * self.fps
         self.acceleration = (self.max_speed - self.base_speed) / frames_needed
         
-        # 揺れパラメータ
-        self.wave_amplitude = 0.2          # 基本の揺れ幅
-        self.speed_wave_factor = 1.5       # 速度による揺れの増加係数
-        self.wave_time = 0                 # 揺れの時間経過
+        self.wave_amplitude = 0.2         # 基本の揺れ幅
+        self.speed_wave_factor = 1.5      # 速度による揺れ増加係数
+        self.wave_time = 0                # 揺れの時間経過
         
-        # パワー状態の円エフェクトパラメータ
-        self.circle_animation_time = 0     # アニメーション用タイマー
+        self.circle_animation_time = 0    # 円エフェクト用タイマー
         self.BASE_MIN_CIRCLE_SIZE = 6     # 基本の最小円サイズ
         self.BASE_MAX_CIRCLE_SIZE = 8     # 基本の最大円サイズ
         
@@ -185,7 +169,6 @@ class Player(Character):
     def update(self, can_move_to) -> None:
         import math
         
-        # ブースト時間の更新
         if self.kill_boost_timer > 0:
             self.kill_boost_timer -= 1
 
@@ -206,34 +189,22 @@ class Player(Character):
             is_moving = True
 
         if is_moving:
-            # キー入力中は加速度分だけ速度を増加（最大速度に達するまで）
             self.current_speed = min(self.current_speed + self.acceleration, self.max_speed)
-            
-            # パワード状態以降は揺れを適用する
             if self.current_speed >= self.powerd_speed:
-                # 速度に応じた揺れ幅を計算
                 speed_ratio = (self.current_speed - self.powerd_speed) / (self.max_speed - self.powerd_speed)
                 current_amplitude = self.wave_amplitude * (1 + speed_ratio * self.speed_wave_factor)
-                
-                # サイン波で揺れを計算
                 wave = math.sin(self.wave_time) * current_amplitude
-                
-                # 進行方向に垂直な揺れを適用
-                if base_dx != 0:  # 左右移動の場合
+                if base_dx != 0:
                     base_dy += wave
-                elif base_dy != 0:  # 上下移動の場合
+                elif base_dy != 0:
                     base_dx += wave
-                
                 self.wave_time += 0.2
         else:
-            # キー入力がなければ基本速度にリセット
             self.current_speed = self.base_speed
 
-        # 移動量を返す（実際の移動はAppクラスで実施）
         return base_dx, base_dy
 
     def draw(self) -> None:
-        # パワー状態の円エフェクトを描画する
         if self.current_speed >= self.powerd_speed:
             speed_ratio = (self.current_speed - self.powerd_speed) / (self.max_speed - self.powerd_speed)
             min_size = self.BASE_MIN_CIRCLE_SIZE * (1 + speed_ratio)
@@ -248,8 +219,7 @@ class Player(Character):
                 for x in range(center_x - radius, center_x + radius + 1):
                     if (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2:
                         if (x - center_x) ** 2 + (y - center_y) ** 2 >= (radius - 1) ** 2:
-                            pyxel.pset(x, y, 10)  # 黄色で円を描画
-
+                            pyxel.pset(x, y, 10)
         color = 10 if self.current_speed >= self.powerd_speed else 8
         pyxel.rect(int(self.x - self.half_size),
                    int(self.y - self.half_size),
@@ -263,40 +233,34 @@ class Enemy(Character):
         super().__init__(x, y, speed=0.8)
         self.direction = random.randint(0, 3)
         self.direction_timer = random.randint(30, 90)
-        self.wave_offset = random.uniform(0, 6.28)  # 0〜2πのランダムな初期位相
-        self.wave_amplitude = 0.3  # 揺れの振幅
-        self.time = 0  # 時間経過
+        self.wave_offset = random.uniform(0, 6.28)
+        self.wave_amplitude = 0.3
+        self.time = 0
         
-        # 出現エフェクト用パラメータ
-        self.SPAWN_DURATION = 30  # 出現エフェクト継続フレーム（30fpsで1秒）
-        self.spawn_timer = 0      # 出現からの経過フレーム
+        self.SPAWN_DURATION = 30  # 出現エフェクト継続フレーム
+        self.spawn_timer = 0
         
-        # 増殖クールダウン用パラメータ
-        self.MULTIPLY_COOLDOWN = 150  # 増殖後のクールダウン時間（30fpsで1秒）
-        self.multiply_cooldown = 0   # クールダウンタイマー
+        self.MULTIPLY_COOLDOWN = 150  # 増殖後のクールダウン（150フレーム=5秒）
+        self.multiply_cooldown = 0
 
     def update(self, can_move_to) -> None:
         import math
-        
-        # 出現・増殖タイマーの更新
         if self.spawn_timer < self.SPAWN_DURATION:
             self.spawn_timer += 1
         if self.multiply_cooldown > 0:
             self.multiply_cooldown -= 1
         
-        # 基本の移動量を計算
         base_dx = base_dy = 0
-        if self.direction == 0:    # 左
+        if self.direction == 0:
             base_dx = -self.speed
-        elif self.direction == 1:  # 右
+        elif self.direction == 1:
             base_dx = self.speed
-        elif self.direction == 2:  # 上
+        elif self.direction == 2:
             base_dy = -self.speed
-        else:                      # 下
+        else:
             base_dy = self.speed
 
         wave = math.sin(self.time + self.wave_offset) * self.wave_amplitude
-        
         if self.direction in [0, 1]:
             dx = base_dx
             dy = wave
@@ -312,24 +276,22 @@ class Enemy(Character):
             self.y = new_y
         else:
             self.direction = random.randint(0, 3)
-            self.wave_offset = random.uniform(0, 6.28)  # 衝突時に位相リセット
+            self.wave_offset = random.uniform(0, 6.28)
 
         self.time += 0.1
-
         self.direction_timer -= 1
         if self.direction_timer <= 0:
             self.direction = random.randint(0, 3)
             self.direction_timer = random.randint(30, 90)
-            self.wave_offset = random.uniform(0, 6.28)  # 方向変更時に位相リセット
+            self.wave_offset = random.uniform(0, 6.28)
 
     def draw(self) -> None:
         if self.spawn_timer < self.SPAWN_DURATION:
-            color = 11  # 出現後1秒は緑
+            color = 11
         elif self.multiply_cooldown > 0:
-            color = 1 if (pyxel.frame_count // 10) % 2 == 0 else 12  # クールダウン中は点滅
+            color = 1 if (pyxel.frame_count // 10) % 2 == 0 else 12
         else:
-            color = 12  # 通常は青
-
+            color = 12
         pyxel.rect(int(self.x - self.half_size),
                    int(self.y - self.half_size),
                    4, 4, color)
@@ -339,32 +301,31 @@ class App:
     ゲームの主要クラス
     """
     def __init__(self):
-        # 画面サイズの設定
         self.screen_width = 240
         self.screen_height = 340
         pyxel.init(self.screen_width, self.screen_height, title="Maze Walk", fps=30)
         self.tile_size = 16
-        self.max_enemies = 400      # エネミーの最大数
-        self.initial_enemies = 50   # 初期エネミー数
+        self.max_enemies = 250      # エネミーの最大数
+        self.initial_enemies = 30   # 初期エネミー数
         
-        # 壁衝突デバッグ用タイマー
+        # 増殖関連パラメータ
+        self.proliferation_probability = 0.1   # 各エネミーが増殖する確率（10%）
+        self.proliferation_interval = 5 * 30     # 増殖間隔（5秒＝150フレーム）
+        self.proliferation_count = 1             # 増殖時に生成するエネミーの個数
+        self.proliferation_timer = 0             # 増殖タイマー
+        
         self.wall_flash_timer = 0
 
-        # 画面サイズとタイルサイズからランダムな迷路（マップ）を生成
         self.map_data = generate_map_data(self.screen_width, self.screen_height, self.tile_size)
-
-        # プレイヤーの初期位置を決定
         player_x, player_y = find_valid_position(self.map_data, self.tile_size)
         self.player = Player(player_x, player_y)
         
-        # エネミーおよびパーティクルの初期化
         self.enemies = []
-        self.particles = []  # パーティクルエフェクト用リスト
+        self.particles = []
         for _ in range(self.initial_enemies):
             enemy_x, enemy_y = find_valid_position(self.map_data, self.tile_size)
             self.enemies.append(Enemy(enemy_x, enemy_y))
         
-        # NEXT STAGE表示用タイマー（0で通常状態）
         self.stage_clear_timer = 0
 
         pyxel.run(self.update, self.draw)
@@ -375,13 +336,10 @@ class App:
          ・新しいランダム迷路を生成
          ・プレイヤー、エネミー、パーティクルを初期状態にリセット
         """
-        # 新たな迷路を生成する
         self.map_data = generate_map_data(self.screen_width, self.screen_height, self.tile_size)
-        # プレイヤーの初期位置を更新
         player_x, player_y = find_valid_position(self.map_data, self.tile_size)
         self.player.x, self.player.y = player_x, player_y
         self.player.reset_power_state()
-        # エフェクト用リストとエネミーをリセット
         self.particles = []
         self.enemies = []
         for _ in range(self.initial_enemies):
@@ -417,8 +375,8 @@ class App:
 
     def can_move_to(self, x: float, y: float, half_size: int = 2) -> bool:
         """
-        指定されたピクセル座標が移動可能かどうかを判定する
-        （セルの四隅がすべて壁でなければ移動可能とする）
+        指定されたピクセル座標が移動可能か判定する
+         ・セルの四隅がすべて壁でなければ移動可能とする
         """
         corners = [
             (int((x - half_size) // self.tile_size), int((y - half_size) // self.tile_size)),
@@ -435,59 +393,40 @@ class App:
         return abs(x1 - x2) < 4 and abs(y1 - y2) < 4
 
     def update(self):
-        # ステージクリア中は通常の更新を行わず、タイマーが0になったらリセット
         if self.stage_clear_timer > 0:
             self.stage_clear_timer -= 1
             if self.stage_clear_timer == 0:
                 self.reset_stage()
             return
 
-        # プレイヤーの元の位置を記録（衝突時の戻し用）
         old_x = self.player.x
         old_y = self.player.y
         
-        # プレイヤーの移動量を取得する
         dx, dy = self.player.update(self.can_move_to)
         
-        # 移動可能かを判定し、可能なら移動、できなければ壁衝突処理
         if self.can_move_to(self.player.x + dx, self.player.y + dy):
             self.player.x += dx
             self.player.y += dy
         else:
             # # print("壁衝突検知")  # デバッグ用（コメントアウト）
-            # # print(f"現在速度: {self.player.current_speed:.2f}, パワー速度: {self.player.powerd_speed:.2f}")  # デバッグ用（コメントアウト）
             if self.player.current_speed >= self.player.powerd_speed:
-                # # print("火花生成処理開始")  # デバッグ用（コメントアウト）
-                self.wall_flash_timer = 5  # 5フレーム間、壁の色を点滅させる
-                
-                # パワー状態での壁衝突時に火花エフェクトを生成
-                self.create_spark_effect(
-                    self.player.x, self.player.y, 
-                    self.player.current_speed
-                )
-                
-                # # print("パワー状態での壁衝突！")  # デバッグ用（コメントアウト）
+                self.wall_flash_timer = 5
+                self.create_spark_effect(self.player.x, self.player.y, self.player.current_speed)
                 if self.player.kill_boost_timer <= 0:
                     self.player.wall_hits += 1
-                
-                # はじき返し処理（壁から離れる方向へ移動）
                 bounce_x = -dx * self.player.WALL_BOUNCE if dx != 0 else 0
                 bounce_y = -dy * self.player.WALL_BOUNCE if dy != 0 else 0
                 if self.can_move_to(self.player.x + bounce_x, self.player.y + bounce_y):
                     self.player.x += bounce_x
                     self.player.y += bounce_y
-                
-                if (self.player.wall_hits >= self.player.MAX_WALL_HITS and 
-                    self.player.kill_boost_timer <= 0):
+                if (self.player.wall_hits >= self.player.MAX_WALL_HITS and self.player.kill_boost_timer <= 0):
                     self.player.reset_power_state()
 
-        # エネミーの更新とプレイヤーとの衝突判定
         collision_occurred = False
         remaining_enemies = []
 
         for enemy in self.enemies:
             enemy.update(self.can_move_to)
-            
             if self.check_collision(self.player.x, self.player.y, enemy.x, enemy.y):
                 if self.player.current_speed >= self.player.powerd_speed:
                     self.create_death_effect(enemy.x, enemy.y, 12)
@@ -500,13 +439,13 @@ class App:
                     if total_enemies < self.max_enemies and enemy.multiply_cooldown == 0:
                         for _ in range(2):
                             if total_enemies + _ < self.max_enemies:
+                                # 衝突時は新規エネミーの位置をランダムに生成
                                 new_x, new_y = find_valid_position(self.map_data, self.tile_size)
                                 new_enemy = Enemy(new_x, new_y)
                                 remaining_enemies.append(new_enemy)
                         enemy.multiply_cooldown = enemy.MULTIPLY_COOLDOWN
             remaining_enemies.append(enemy)
 
-        # パーティクルの更新およびエネミーとの衝突判定
         updated_particles = []
         for particle in self.particles:
             killed_enemies = particle.check_enemy_collision(remaining_enemies)
@@ -525,13 +464,25 @@ class App:
 
         self.enemies = remaining_enemies
 
-        # すべてのエネミーが消滅したら、次のステージへ遷移する
+        # 任意の秒ごとの増殖処理（全エネミーの10%が対象）は元のエネミーと同じ位置に生成
+        self.proliferation_timer += 1
+        if self.proliferation_timer >= self.proliferation_interval:
+            self.proliferation_timer = 0
+            new_enemies = []
+            for enemy in self.enemies:
+                if enemy.multiply_cooldown == 0 and random.random() < self.proliferation_probability:
+                    for _ in range(self.proliferation_count):
+                        if len(self.enemies) + len(new_enemies) < self.max_enemies:
+                            # 新規エネミーは元のエネミーと同じ位置に生成
+                            new_enemies.append(Enemy(enemy.x, enemy.y))
+                    enemy.multiply_cooldown = enemy.MULTIPLY_COOLDOWN
+            self.enemies.extend(new_enemies)
+
         if not self.enemies:
-            self.stage_clear_timer = 60  # 60フレーム（約2秒）表示
+            self.stage_clear_timer = 60  # 60フレーム表示
 
     def draw(self):
         pyxel.cls(0)
-        # マップに基づいて壁を描画する
         for y, row in enumerate(self.map_data):
             for x, tile in enumerate(row):
                 if tile == 1:
