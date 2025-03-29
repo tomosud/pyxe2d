@@ -32,7 +32,7 @@ class Particle:
         self.dx = math.cos(angle) * speed
         self.dy = math.sin(angle) * speed
         self.color = color
-        self.life = 30  # 1秒間表示
+        self.life = 50  # 1秒間表示
         self.is_spark = is_spark
         self.wall_hits = 0 if is_spark else -1  # -1は壁判定なし、火花は2回まで
         self.half_size = 1  # パーティクルサイズの半分
@@ -65,7 +65,7 @@ class Particle:
         else:
             # 壁との衝突処理
             self.wall_hits += 1
-            if self.wall_hits >= 2:
+            if self.wall_hits >= 8:
                 return False
 
             # 反射角度の計算
