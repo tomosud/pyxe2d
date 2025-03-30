@@ -104,8 +104,21 @@ class TouchController:
             length = math.sqrt(dx * dx + dy * dy)
             
             if length >= min_distance:
-                # 方向の正規化
-                self.current_direction = [dx / length, dy / length]
+                # 角度を計算（ラジアン）
+                angle = math.atan2(dy, dx)
+                
+                # 角度を0-360度に変換
+                degrees = math.degrees(angle) % 360
+                
+                # 45度ごとの範囲で方向を決定
+                if 315 <= degrees or degrees < 45:  # 右
+                    self.current_direction = [1, 0]
+                elif 45 <= degrees < 135:  # 下
+                    self.current_direction = [0, 1]
+                elif 135 <= degrees < 225:  # 左
+                    self.current_direction = [-1, 0]
+                elif 225 <= degrees < 315:  # 上
+                    self.current_direction = [0, -1]
             else:
                 self.current_direction = [0, 0]
         else:
