@@ -177,8 +177,8 @@ class Player(Character):
         self.wave_time = 0
         
         self.circle_animation_time = 0
-        self.BASE_MIN_CIRCLE_SIZE = 6
-        self.BASE_MAX_CIRCLE_SIZE = 8
+        self.circle_min_size = 4  # コリジョンサイズと同じ
+        self.circle_max_size = 5  # わずかに大きく
         
         super().__init__(x, y, speed=self.base_speed)
         self.current_speed = self.base_speed
@@ -223,8 +223,8 @@ class Player(Character):
     def draw(self):
         if self.current_speed >= self.powerd_speed:
             speed_ratio = (self.current_speed - self.powerd_speed) / (self.max_speed - self.powerd_speed)
-            min_size = self.BASE_MIN_CIRCLE_SIZE * (1 + speed_ratio)
-            max_size = self.BASE_MAX_CIRCLE_SIZE * (1 + speed_ratio)
+            min_size = self.circle_min_size * (1 + speed_ratio)
+            max_size = self.circle_max_size * (1 + speed_ratio)
             circle_size = min_size + (math.sin(self.circle_animation_time) + 1) * (max_size - min_size) / 2
             self.circle_animation_time += 0.2
             
@@ -309,11 +309,13 @@ class Enemy(Character):
 
     def draw(self):
         if self.spawn_timer < self.SPAWN_DURATION:
-            color = 11
+            # 生成直後は白色
+            color = 7
         elif self.multiply_cooldown > 0:
             color = 1 if (pyxel.frame_count // 10) % 2 == 0 else 12
         else:
             color = 12
+            
         pyxel.rect(int(self.x - self.half_size),
                    int(self.y - self.half_size),
                    4, 4, color)
@@ -335,6 +337,7 @@ class App:
         self.proliferation_timer = 0
         
         self.wall_flash_timer = 0
+        self.wall_green_timer = 0  # 壁を緑色にするタイマー
 
         # タッチコントローラーの設定
         self.touch_controller = TouchController()
@@ -458,6 +461,7 @@ class App:
                                 new_enemy = Enemy(new_x, new_y)
                                 remaining_enemies.append(new_enemy)
                         enemy.multiply_cooldown = enemy.MULTIPLY_COOLDOWN
+                        self.wall_green_timer = 21  # 約0.7秒（30FPS × 0.7）
             remaining_enemies.append(enemy)
 
         updated_particles = []
@@ -501,12 +505,17 @@ class App:
         for y, row in enumerate(self.map_data):
             for x, tile in enumerate(row):
                 if tile == 1:
-                    color = 10 if self.wall_flash_timer > 0 else 7
+                    if self.wall_green_timer > 0:
+                        color = 11  # 緑色
+                    else:
+                        color = 10 if self.wall_flash_timer > 0 else 7
                     pyxel.rect(x * self.tile_size, y * self.tile_size,
                              self.tile_size, self.tile_size, color)
         
         if self.wall_flash_timer > 0:
             self.wall_flash_timer -= 1
+        if self.wall_green_timer > 0:
+            self.wall_green_timer -= 1
 
         # エネミーとパーティクルの描画
         for enemy in self.enemies:
@@ -521,10 +530,10 @@ class App:
         enemy_text = f"ENEMY: {len(self.enemies)}/{self.max_enemies}"
         
         x = self.screen_width // 2 - len(speed_text) * 2
-        pyxel.text(x, 4, speed_text, 7)
+        pyxel.text(x, 4, speed_text, 0)
         
         x = self.screen_width - len(enemy_text) * 4 - 4
-        pyxel.text(x, 4, enemy_text, 7)
+        pyxel.text(x, 4, enemy_text, 0)
         
         # プレイヤーの描画
         self.player.draw()
@@ -534,6 +543,6 @@ class App:
             text = "NEXT STAGE"
             x = self.screen_width // 2 - len(text) * 2
             y = self.screen_height // 2
-            pyxel.text(x, y, text, 7)
+            pyxel.text(x, y, text, 0)
 
 App()
