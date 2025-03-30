@@ -1,3 +1,25 @@
+"""
+迷路型アクションゲーム仕様概要：
+
+プレイヤー操作：
+- 矢印キーまたはタッチ操作で移動
+- 移動を継続すると徐々に加速（最大65倍）
+- 加速状態で一定速度を超えるとパワー状態に
+- パワー状態では敵を倒せる（パーティクル効果発生）
+- 壁に衝突すると減速、パワー状態では跳ね返り
+
+敵の挙動：
+- 4方向の直線移動＋蛇行
+- プレイヤーと接触すると分裂（最大250体）
+- パワー状態のプレイヤーに倒される
+- 定期的に自然増殖
+
+ゲームシステム：
+- 自動生成された迷路を舞台に展開
+- 敵を全滅させるとステージクリア
+- 新しいステージが自動生成される
+"""
+
 import pyxel
 import random
 import math
@@ -206,6 +228,9 @@ class Player(Character):
 
             self.current_speed = min(self.current_speed + self.acceleration, self.max_speed)
             if self.current_speed >= self.powerd_speed:
+                # パワー状態音を再生
+                if pyxel.frame_count % 30 == 0:  # 1秒ごとに再生
+                    pyxel.play(0, 0)
                 speed_ratio = (self.current_speed - self.powerd_speed) / (self.max_speed - self.powerd_speed)
                 current_amplitude = self.wave_amplitude * (1 + speed_ratio * self.speed_wave_factor)
                 wave = math.sin(self.wave_time) * current_amplitude
@@ -326,6 +351,24 @@ class App:
         self.screen_width = 240
         self.screen_height = 340
         pyxel.init(self.screen_width, self.screen_height, title="Maze Walk", fps=30, capture_sec=0)
+        
+        # サウンドの初期化
+        # チャンネル0: パワー状態音（連続音）
+        pyxel.sounds[0].set(
+            "c3e3g3c4", "s", "4", "s", 10
+        )
+        # チャンネル1: 壁衝突音（短音）
+        pyxel.sounds[1].set(
+            "f3", "n", "4", "s", 3
+        )
+        # チャンネル2: 火花音（パチパチ）
+        pyxel.sounds[2].set(
+            "c3", "p", "4", "s", 2
+        )
+        # チャンネル3: 敵生成音（低音）
+        pyxel.sounds[3].set(
+            "c2", "t", "4", "n", 5
+        )
         
         self.tile_size = 16
         self.max_enemies = 250
@@ -507,6 +550,8 @@ class App:
                 if self.player.current_speed >= self.player.powerd_speed:
                     self.wall_flash_timer = 5
                     self.create_spark_effect(self.player.x, self.player.y, self.player.current_speed)
+                    pyxel.play(1, 1)  # 壁衝突音
+                    pyxel.play(2, 2)  # 火花音
                     if self.player.kill_boost_timer <= 0:
                         self.player.wall_hits += 1
                     
@@ -536,6 +581,7 @@ class App:
             if self.check_collision(self.player.x, self.player.y, enemy.x, enemy.y):
                 if self.player.current_speed >= self.player.powerd_speed:
                     self.create_death_effect(enemy.x, enemy.y, 12)
+                    pyxel.play(2, 2)  # 敵撃破音
                     self.player.kill_boost_timer = self.player.KILL_BOOST_DURATION
                     continue
                 else:
@@ -548,6 +594,7 @@ class App:
                                 new_x, new_y = find_valid_position(self.map_data, self.tile_size)
                                 new_enemy = Enemy(new_x, new_y)
                                 remaining_enemies.append(new_enemy)
+                                pyxel.play(3, 3)  # 敵生成音
                         enemy.multiply_cooldown = enemy.MULTIPLY_COOLDOWN
                         self.wall_green_timer = 21  # 約0.7秒（30FPS × 0.7）
             remaining_enemies.append(enemy)
@@ -559,6 +606,7 @@ class App:
                 if killed_enemy in remaining_enemies:
                     remaining_enemies.remove(killed_enemy)
                     self.create_death_effect(killed_enemy.x, killed_enemy.y, 12)
+                    pyxel.play(2, 2)  # 敵撃破音
             if particle.update(self.can_move_to):
                 updated_particles.append(particle)
         self.particles = updated_particles
@@ -580,11 +628,13 @@ class App:
                     for _ in range(self.proliferation_count):
                         if len(self.enemies) + len(new_enemies) < self.max_enemies:
                             new_enemies.append(Enemy(enemy.x, enemy.y))
+                            pyxel.play(3, 3)  # 敵生成音
                     enemy.multiply_cooldown = enemy.MULTIPLY_COOLDOWN
             self.enemies.extend(new_enemies)
 
         if not self.enemies:
             self.stage_clear_timer = 60
+            pyxel.play(3, 3)  # クリア音
 
     def draw(self):
         pyxel.cls(0)
