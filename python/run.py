@@ -384,13 +384,30 @@ class App:
         return True
 
     def can_move_to(self, x: float, y: float, half_size: int = 2) -> bool:
+        # 四隅の座標を計算
         corners = [
-            (int((x - half_size) // self.tile_size), int((y - half_size) // self.tile_size)),
-            (int((x + half_size) // self.tile_size), int((y - half_size) // self.tile_size)),
-            (int((x - half_size) // self.tile_size), int((y + half_size) // self.tile_size)),
-            (int((x + half_size) // self.tile_size), int((y + half_size) // self.tile_size)),
+            (x - half_size, y - half_size),  # 左上
+            (x + half_size, y - half_size),  # 右上
+            (x - half_size, y + half_size),  # 左下
+            (x + half_size, y + half_size),  # 右下
         ]
-        return all(not self.is_wall(cx, cy) for cx, cy in corners)
+        
+        # 四隅とその中間点をチェック
+        mid_points = [
+            (x, y - half_size),  # 上
+            (x + half_size, y),  # 右
+            (x, y + half_size),  # 下
+            (x - half_size, y),  # 左
+        ]
+        
+        check_points = corners + mid_points
+        
+        # すべてのチェックポイントで壁判定
+        for px, py in check_points:
+            if self.is_wall(int(px // self.tile_size), int(py // self.tile_size)):
+                return False
+                
+        return True
 
     def check_collision(self, x1: float, y1: float, x2: float, y2: float) -> bool:
         return abs(x1 - x2) < 4 and abs(y1 - y2) < 4
@@ -422,23 +439,94 @@ class App:
 
         dx, dy = self.player.update(dx, dy)
         
+        # 壁との衝突判定と移動処理
+        # 移動の試行
+        can_move_x = self.can_move_to(self.player.x + dx, self.player.y)
+        can_move_y = self.can_move_to(self.player.x, self.player.y + dy)
+        
         if self.can_move_to(self.player.x + dx, self.player.y + dy):
+            # 通常の移動
             self.player.x += dx
             self.player.y += dy
         else:
-            if self.player.current_speed >= self.player.powerd_speed:
-                self.wall_flash_timer = 5
-                self.create_spark_effect(self.player.x, self.player.y, self.player.current_speed)
-                if self.player.kill_boost_timer <= 0:
-                    self.player.wall_hits += 1
-                bounce_x = -dx * self.player.WALL_BOUNCE if dx != 0 else 0
-                bounce_y = -dy * self.player.WALL_BOUNCE if dy != 0 else 0
-                if self.can_move_to(self.player.x + bounce_x, self.player.y + bounce_y):
-                    self.player.x += bounce_x
-                    self.player.y += bounce_y
-                if (self.player.wall_hits >= self.player.MAX_WALL_HITS and 
-                    self.player.kill_boost_timer <= 0):
-                    self.player.reset_power_state()
+            # 壁との衝突時の処理
+            hit_wall = False
+            
+            # より自然な移動処理
+            moved = False
+            hit_wall = True
+            
+            # 移動の強さを計算
+            strength = math.sqrt(dx * dx + dy * dy)
+            norm_dx = dx / strength if strength > 0 else 0
+            norm_dy = dy / strength if strength > 0 else 0
+            
+            # まず斜め移動を試みる
+            if can_move_x and can_move_y:
+                slide_speed = 0.7  # 斜め移動時の基本速度
+                next_x = self.player.x + dx * slide_speed
+                next_y = self.player.y + dy * slide_speed
+                
+                if self.can_move_to(next_x, next_y):
+                    self.player.x = next_x
+                    self.player.y = next_y
+                    moved = True
+            
+            # 斜め移動が失敗した場合、主方向の移動を試みる
+            if not moved:
+                if abs(norm_dx) > abs(norm_dy):
+                    if can_move_x:
+                        next_x = self.player.x + dx * 0.85
+                        if self.can_move_to(next_x, self.player.y):
+                            self.player.x = next_x
+                            # 補助方向の移動を試みる
+                            if can_move_y:
+                                next_y = self.player.y + dy * 0.5
+                                if self.can_move_to(self.player.x, next_y):
+                                    self.player.y = next_y
+                            moved = True
+                else:
+                    if can_move_y:
+                        next_y = self.player.y + dy * 0.85
+                        if self.can_move_to(self.player.x, next_y):
+                            self.player.y = next_y
+                            # 補助方向の移動を試みる
+                            if can_move_x:
+                                next_x = self.player.x + dx * 0.5
+                                if self.can_move_to(next_x, self.player.y):
+                                    self.player.x = next_x
+                            moved = True
+            
+            # 移動できなかった場合
+            if not moved:
+                self.player.x = old_x
+                self.player.y = old_y
+                hit_wall = True
+
+            if hit_wall:
+                if self.player.current_speed >= self.player.powerd_speed:
+                    self.wall_flash_timer = 5
+                    self.create_spark_effect(self.player.x, self.player.y, self.player.current_speed)
+                    if self.player.kill_boost_timer <= 0:
+                        self.player.wall_hits += 1
+                    
+                    # パワー状態での跳ね返り
+                    bounce_x = -dx * self.player.WALL_BOUNCE if dx != 0 else 0
+                    bounce_y = -dy * self.player.WALL_BOUNCE if dy != 0 else 0
+                    if self.can_move_to(self.player.x + bounce_x, self.player.y + bounce_y):
+                        self.player.x += bounce_x
+                        self.player.y += bounce_y
+                    
+                    if (self.player.wall_hits >= self.player.MAX_WALL_HITS and 
+                        self.player.kill_boost_timer <= 0):
+                        self.player.reset_power_state()
+                else:
+                    # 通常状態での速度減衰（最低速度を保証）
+                    min_speed = self.player.base_speed * 3
+                    self.player.current_speed = max(
+                        min_speed,
+                        self.player.current_speed * 0.9
+                    )
 
         collision_occurred = False
         remaining_enemies = []
