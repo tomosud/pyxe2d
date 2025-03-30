@@ -60,66 +60,38 @@ def generate_map_data(screen_width: int, screen_height: int, tile_size: int) -> 
         rows -= 1
     return generate_maze(cols, rows)
 
-class TouchButton:
-    """タッチボタンの基本クラス"""
-    def __init__(self, x: int, y: int, size: int):
-        self.x = x
-        self.y = y
-        self.size = size
-        self.half_size = size // 2
-        self.is_pressed = False
+class TouchController:
+    """タッチ操作を管理するクラス"""
+    def __init__(self):
+        self.touch_start_x = None
+        self.touch_start_y = None
+        self.current_direction = [0, 0]  # [dx, dy]
 
-    def check_touch(self, touch_x: int, touch_y: int) -> bool:
-        """タッチ判定"""
-        return (abs(touch_x - self.x) < self.half_size and 
-                abs(touch_y - self.y) < self.half_size)
-
-    def draw(self):
-        """ボタンの描画"""
-        color = 10 if self.is_pressed else 5
-        pyxel.circb(self.x, self.y, self.half_size, color)
-
-class DirectionalPad:
-    """方向パッドクラス"""
-    def __init__(self, x: int, y: int, size: int):
-        self.x = x
-        self.y = y
-        self.size = size
-        self.half_size = size // 2
-        self.pressed_direction = [0, 0]  # [dx, dy]
-
-    def check_touch(self, touch_x: int, touch_y: int) -> Tuple[float, float]:
-        """タッチ位置から移動方向を計算"""
-        if not (abs(touch_x - self.x) < self.size and 
-                abs(touch_y - self.y) < self.size):
-            return (0, 0)
-
-        dx = touch_x - self.x
-        dy = touch_y - self.y
-        
-        length = math.sqrt(dx * dx + dy * dy)
-        if length < 5:  # デッドゾーン
-            return (0, 0)
-
-        normalized_dx = dx / length
-        normalized_dy = dy / length
-        return (normalized_dx, normalized_dy)
-
-    def draw(self):
-        """方向パッドの描画"""
-        # 外枠
-        pyxel.circb(self.x, self.y, self.half_size, 5)
-        
-        # 十字線
-        length = self.half_size - 5
-        pyxel.line(self.x - length, self.y, self.x + length, self.y, 5)
-        pyxel.line(self.x, self.y - length, self.x, self.y + length, 5)
-
-        # タッチ中の方向を示す
-        if self.pressed_direction[0] != 0 or self.pressed_direction[1] != 0:
-            end_x = self.x + self.pressed_direction[0] * (self.half_size - 10)
-            end_y = self.y + self.pressed_direction[1] * (self.half_size - 10)
-            pyxel.line(self.x, self.y, int(end_x), int(end_y), 10)
+    def update(self) -> Tuple[float, float]:
+        """タッチ入力を更新し、移動方向を返す"""
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            self.touch_start_x = pyxel.mouse_x
+            self.touch_start_y = pyxel.mouse_y
+            self.current_direction = [0, 0]
+        elif pyxel.btn(pyxel.MOUSE_BUTTON_LEFT) and self.touch_start_x is not None:
+            dx = pyxel.mouse_x - self.touch_start_x
+            dy = pyxel.mouse_y - self.touch_start_y
+            
+            # 最小移動距離（デッドゾーン）
+            min_distance = 5
+            length = math.sqrt(dx * dx + dy * dy)
+            
+            if length >= min_distance:
+                # 方向の正規化
+                self.current_direction = [dx / length, dy / length]
+            else:
+                self.current_direction = [0, 0]
+        else:
+            self.touch_start_x = None
+            self.touch_start_y = None
+            self.current_direction = [0, 0]
+            
+        return tuple(self.current_direction)
 
 class Particle:
     """パーティクルエフェクト用のクラス"""
@@ -210,6 +182,7 @@ class Player(Character):
         
         super().__init__(x, y, speed=self.base_speed)
         self.current_speed = self.base_speed
+        self.direction = [0, 0]  # 現在の進行方向
 
     def reset_power_state(self):
         self.current_speed = self.base_speed
@@ -223,6 +196,9 @@ class Player(Character):
         is_moving = dx != 0 or dy != 0
 
         if is_moving:
+            # 進行方向を保存
+            self.direction = [dx, dy]
+            
             # ベクトルの正規化
             length = math.sqrt(dx * dx + dy * dy)
             normalized_dx = (dx / length) * self.current_speed
@@ -240,6 +216,7 @@ class Player(Character):
                 self.wave_time += 0.2
             return normalized_dx, normalized_dy
         else:
+            self.direction = [0, 0]
             self.current_speed = self.base_speed
             return 0, 0
 
@@ -264,6 +241,14 @@ class Player(Character):
         pyxel.rect(int(self.x - self.half_size),
                    int(self.y - self.half_size),
                    4, 4, color)
+
+        # 進行方向の表示
+        if self.direction[0] != 0 or self.direction[1] != 0:
+            line_length = 20
+            end_x = self.x + self.direction[0] * line_length
+            end_y = self.y + self.direction[1] * line_length
+            pyxel.line(int(self.x), int(self.y),
+                      int(end_x), int(end_y), 10)
 
 class Enemy(Character):
     """敵キャラクターを管理するクラス"""
@@ -351,8 +336,8 @@ class App:
         
         self.wall_flash_timer = 0
 
-        # 仮想コントローラーの設定
-        self.dpad = DirectionalPad(50, self.screen_height - 50, 60)
+        # タッチコントローラーの設定
+        self.touch_controller = TouchController()
 
         self.map_data = generate_map_data(self.screen_width, self.screen_height, self.tile_size)
         player_x, player_y = find_valid_position(self.map_data, self.tile_size)
@@ -429,14 +414,8 @@ class App:
             dy = 1
 
         # タッチ入力の処理
-        if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
-            touch_dx, touch_dy = self.dpad.check_touch(pyxel.mouse_x, pyxel.mouse_y)
-            if touch_dx != 0 or touch_dy != 0:
-                dx = touch_dx
-                dy = touch_dy
-                self.dpad.pressed_direction = [touch_dx, touch_dy]
-        else:
-            self.dpad.pressed_direction = [0, 0]
+        if dx == 0 and dy == 0:  # キーボード入力がない場合のみタッチ操作を処理
+            dx, dy = self.touch_controller.update()
 
         dx, dy = self.player.update(dx, dy)
         
@@ -549,9 +528,6 @@ class App:
         
         # プレイヤーの描画
         self.player.draw()
-
-        # 仮想コントローラーの描画
-        self.dpad.draw()
 
         # ステージクリア表示
         if self.stage_clear_timer > 0:
