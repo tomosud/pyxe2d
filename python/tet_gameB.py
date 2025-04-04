@@ -90,9 +90,13 @@ CELL_SIZE = 1
 PLAY_WIDTH = 100
 PLAY_HEIGHT = 120
 
+FALL_SPEED_INIT = 0.1
+MOVE_DELAY_INIT = 0.1
+SPEED_MULTIPLIER = 0.75
+
 class App:
     def __init__(self):
-        pyxel.init(PLAY_WIDTH, PLAY_HEIGHT, title="カタカナテトリス（判定付き）", display_scale=4)
+        pyxel.init(PLAY_WIDTH, PLAY_HEIGHT, title="テトリス", display_scale=4)
         self.set_colors()
         self.set_blocks()
         self.reset()
@@ -130,11 +134,17 @@ class App:
         self.spawn_new_block()
         self.gmovflg = 0
         self.t0 = time.time()
+        self.t_move = time.time()
         self.score = 0
+        self.stage = 1
+        self.fall_speed = FALL_SPEED_INIT
+        self.move_delay = MOVE_DELAY_INIT
         self.exploding = False
         self.explode_timer = 0
         self.explode_phase = 0
         self.explode_particles = []
+        self.pause_phase = 0
+        self.pause_duration = 0.6
 
     def reset_after_chain(self):
         self.board = [[None for _ in range(PLAY_WIDTH)] for _ in range(PLAY_HEIGHT)]
@@ -143,6 +153,7 @@ class App:
         self.spawn_new_block()
         self.gmovflg = 0
         self.t0 = time.time()
+        self.t_move = time.time()
 
     def spawn_new_block(self):
         self.block = random.choice(self.blocks)
@@ -248,6 +259,8 @@ class App:
         self.explode_timer = time.time()
         self.explode_phase = 0
         self.explode_particles = []
+        self.pause_phase = 0
+        self.pause_duration = 0.6
 
         for y in range(PLAY_HEIGHT):
             for x in range(PLAY_WIDTH):
@@ -257,8 +270,8 @@ class App:
                     self.explode_particles.append({
                         "x": x,
                         "y": y,
-                        "vx": random.uniform(-3, 3),  # ← 派手に！
-                        "vy": random.uniform(-5, -1),  # ← 高く！
+                        "vx": random.uniform(-3, 3),
+                        "vy": random.uniform(-5, -1),
                         "color": 7 if is_chain else cell["color"],
                         "remove_phase": 2 if is_chain else 1
                     })
@@ -272,32 +285,45 @@ class App:
             return
 
         if self.exploding:
-            if time.time() - self.explode_timer > 0.2:
-                self.explode_phase += 1
-                self.explode_timer = time.time()
-                if self.explode_phase > 2:
-                    self.exploding = False
-                    self.score += 100
-                    self.tetris_chain_ids.clear()
-                    self.explode_particles.clear()
-                    self.reset_after_chain()
-            return
+            if self.pause_phase == 0:
+                if time.time() - self.explode_timer > self.pause_duration:
+                    self.pause_phase = 1
+                    self.explode_timer = time.time()
+                return
+            elif self.pause_phase == 1:
+                if time.time() - self.explode_timer > 0.2:
+                    self.explode_phase += 1
+                    self.explode_timer = time.time()
+                    if self.explode_phase > 2:
+                        self.exploding = False
+                        self.score += 100
+                        self.stage += 1
+                        self.fall_speed *= SPEED_MULTIPLIER
+                        self.move_delay *= SPEED_MULTIPLIER
+                        self.tetris_chain_ids.clear()
+                        self.explode_particles.clear()
+                        self.reset_after_chain()
+                return
 
-        if pyxel.btn(pyxel.KEY_DOWN) or (time.time() - self.t0 > 0.1):
+        now = time.time()
+        if pyxel.btn(pyxel.KEY_DOWN) or (now - self.t0 > self.fall_speed):
             self.by += 1
             if not self.chkbox():
                 self.by -= 1
                 self.lock_block()
-            self.t0 = time.time()
+            self.t0 = now
 
-        if pyxel.btnp(pyxel.KEY_LEFT):
-            self.bx -= 2
-            if not self.chkbox():
-                self.bx += 2
-        if pyxel.btnp(pyxel.KEY_RIGHT):
-            self.bx += 2
-            if not self.chkbox():
+        if now - self.t_move > self.move_delay:
+            if pyxel.btn(pyxel.KEY_LEFT):
                 self.bx -= 2
+                if not self.chkbox():
+                    self.bx += 2
+                self.t_move = now
+            if pyxel.btn(pyxel.KEY_RIGHT):
+                self.bx += 2
+                if not self.chkbox():
+                    self.bx -= 2
+                self.t_move = now
 
         if pyxel.btnp(pyxel.KEY_SPACE):
             old = self.set
@@ -307,6 +333,7 @@ class App:
 
     def draw(self):
         pyxel.cls(0)
+
         for y in range(PLAY_HEIGHT):
             for x in range(PLAY_WIDTH):
                 cell = self.board[y][x]
@@ -325,20 +352,25 @@ class App:
                         pyxel.blt(gx, gy, 0, color * CELL_SIZE, 0, CELL_SIZE, CELL_SIZE)
 
         if self.exploding:
-            for p in self.explode_particles:
-                if self.explode_phase >= p["remove_phase"]:
-                    p["x"] += p["vx"]
-                    p["y"] += p["vy"]
-                    pyxel.pset(int(p["x"]), int(p["y"]), p["color"])
+            if self.pause_phase == 0:
+                for blk in self.settled_blocks:
+                    if blk["block_id"] in self.tetris_chain_ids:
+                        for (x, y) in blk["positions"]:
+                            pyxel.pset(x, y, 7)
+            else:
+                for p in self.explode_particles:
+                    if self.explode_phase >= p["remove_phase"]:
+                        p["x"] += p["vx"]
+                        p["y"] += p["vy"]
+                        pyxel.pset(int(p["x"]), int(p["y"]), p["color"])
+
+            pyxel.text(PLAY_WIDTH // 2 - 20, 40, "テトリス！", pyxel.frame_count % 16)
 
         pyxel.text(5, 5, f"SCORE: {self.score}", 7)
+        pyxel.text(5, 15, f"STAGE: {self.stage}", 7)
 
-        if self.tetris_chain_ids:
-            pyxel.text(10, 15, "TETRIS!", 7)
         if self.gmovflg:
             pyxel.text(30, 50, "GAME OVER", 7)
-            pyxel.text(20, 60, "Press ENTER to restart", 7)
-
-
+            pyxel.text(20, 60, "Press ENTER \nto restart", 7)
 
 App()
