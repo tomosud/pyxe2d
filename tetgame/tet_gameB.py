@@ -88,7 +88,7 @@ BLOCK_COLORS = {
 
 CELL_SIZE = 1
 PLAY_WIDTH = 100
-PLAY_HEIGHT = 120
+PLAY_HEIGHT = 115
 
 FALL_SPEED_INIT = 0.1
 MOVE_DELAY_INIT = 0.1
@@ -96,10 +96,31 @@ SPEED_MULTIPLIER = 0.75
 
 class App:
     def __init__(self):
-        pyxel.init(PLAY_WIDTH, PLAY_HEIGHT, title="テトリス", display_scale=4)
+        # ボタンの設定を追加
+        self.btn_width = 20
+        self.btn_height = 16
+        self.btn_margin = 5
+        screen_height = PLAY_HEIGHT + self.btn_height + self.btn_margin * 2
+
+        # 画面幅に合わせてボタンの合計幅を調整
+        total_margin = self.btn_margin * 3  # 3つの間隔
+        self.btn_width = (PLAY_WIDTH - total_margin) // 4  # 4つのボタンで均等に分割
+        
+        pyxel.init(PLAY_WIDTH, screen_height, title="テトリス", display_scale=4)
         self.set_colors()
         self.set_blocks()
         self.reset()
+        
+        # ボタンの位置を設定（画面幅一杯に配置）
+        button_base_y = PLAY_HEIGHT + self.btn_margin
+        
+        self.buttons = [
+            {"x": 0, "y": button_base_y, "w": self.btn_width, "h": self.btn_height, "text": "<", "key": pyxel.KEY_LEFT},
+            {"x": self.btn_width + self.btn_margin, "y": button_base_y, "w": self.btn_width, "h": self.btn_height, "text": ">", "key": pyxel.KEY_RIGHT},
+            {"x": (self.btn_width + self.btn_margin) * 2, "y": button_base_y, "w": self.btn_width, "h": self.btn_height, "text": "v", "key": pyxel.KEY_DOWN},
+            {"x": (self.btn_width + self.btn_margin) * 3, "y": button_base_y, "w": self.btn_width, "h": self.btn_height, "text": "R", "key": pyxel.KEY_SPACE}
+        ]
+        
         pyxel.run(self.update, self.draw)
 
     def set_colors(self):
@@ -278,11 +299,49 @@ class App:
 
         self.board = [[None for _ in range(PLAY_WIDTH)] for _ in range(PLAY_HEIGHT)]
 
+    def check_button_press(self, x, y, button):
+        return (button["x"] <= x <= button["x"] + button["w"] and
+                button["y"] <= y <= button["y"] + button["h"])
+
     def update(self):
+        now = time.time()
+
         if self.gmovflg:
-            if pyxel.btnp(pyxel.KEY_RETURN):
+            # キーボードとタッチ両方でリスタート可能に
+            if pyxel.btnp(pyxel.KEY_RETURN) or pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 self.reset()
             return
+
+        # マウス/タッチ入力の処理
+        if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+            mx, my = pyxel.mouse_x, pyxel.mouse_y
+            for button in self.buttons:
+                if self.check_button_press(mx, my, button):
+                    if button["key"] == pyxel.KEY_SPACE and pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+                        # 回転は一回だけ
+                        old = self.set
+                        self.set = (self.set + 1) % 4
+                        if not self.chkbox():
+                            self.set = old
+                    elif button["key"] == pyxel.KEY_DOWN:
+                        # 下キーは加速
+                        if now - self.t0 > self.fall_speed * 0.2:  # 感度調整
+                            self.by += 1
+                            if not self.chkbox():
+                                self.by -= 1
+                                self.lock_block()
+                            self.t0 = now
+                    elif now - self.t_move > self.move_delay * 0.5:  # 感度調整
+                        # 左右移動
+                        if button["key"] == pyxel.KEY_LEFT:
+                            self.bx -= 1
+                            if not self.chkbox():
+                                self.bx += 1
+                        elif button["key"] == pyxel.KEY_RIGHT:
+                            self.bx += 1
+                            if not self.chkbox():
+                                self.bx -= 1
+                        self.t_move = now
 
         if self.exploding:
             if self.pause_phase == 0:
@@ -331,6 +390,26 @@ class App:
             if not self.chkbox():
                 self.set = old
 
+    def draw_arrow(self, x, y, direction):
+        # ボタンの中心座標を計算
+        cx = x + self.btn_width // 2
+        cy = y + self.btn_height // 2
+
+        if direction == "left":
+            # 左向き三角形
+            pyxel.tri(cx + 5, cy - 5, cx + 5, cy + 5, cx - 5, cy, 7)
+        elif direction == "right":
+            # 右向き三角形
+            pyxel.tri(cx - 5, cy - 5, cx - 5, cy + 5, cx + 5, cy, 7)
+        elif direction == "down":
+            # 下向き三角形
+            pyxel.tri(cx - 5, cy - 5, cx + 5, cy - 5, cx, cy + 5, 7)
+        elif direction == "rotate":
+            # 回転アイコン（矢印付き円）
+            pyxel.circb(cx, cy, 4, 7)
+            # 矢印
+            pyxel.tri(cx + 4, cy - 2, cx + 4, cy + 2, cx + 7, cy, 7)
+
     def draw(self):
         pyxel.cls(0)
 
@@ -368,6 +447,22 @@ class App:
 
         pyxel.text(5, 5, f"SCORE: {self.score}", 7)
         pyxel.text(5, 15, f"STAGE: {self.stage}", 7)
+
+        # ボタンの描画
+        for i, button in enumerate(self.buttons):
+            # ボタンの背景
+            pyxel.rectb(button["x"], button["y"], button["w"], button["h"], 5)
+            pyxel.rect(button["x"] + 1, button["y"] + 1, button["w"] - 2, button["h"] - 2, 1)
+            
+            # 矢印の描画
+            if i == 0:  # 左
+                self.draw_arrow(button["x"], button["y"], "left")
+            elif i == 1:  # 右
+                self.draw_arrow(button["x"], button["y"], "right")
+            elif i == 2:  # 下
+                self.draw_arrow(button["x"], button["y"], "down")
+            else:  # 回転
+                self.draw_arrow(button["x"], button["y"], "rotate")
 
         if self.gmovflg:
             pyxel.text(30, 50, "GAME OVER", 7)
