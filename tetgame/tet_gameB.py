@@ -402,8 +402,8 @@ class App:
             # 右向き三角形
             pyxel.tri(cx - 5, cy - 5, cx - 5, cy + 5, cx + 5, cy, 7)
         elif direction == "down":
-            # 下向き三角形
-            pyxel.tri(cx - 5, cy - 5, cx + 5, cy - 5, cx, cy + 5, 7)
+            # 下向き三角形（黄色: カラーパレット10番）
+            pyxel.tri(cx - 5, cy - 5, cx + 5, cy - 5, cx, cy + 5, 10)
         elif direction == "rotate":
             # 回転アイコン（矢印付き円）
             pyxel.circb(cx, cy, 4, 7)
